@@ -1,6 +1,13 @@
 require 'sinatra'
-require 'rest-client'
+require 'rest_client'
 require 'json'
+
+# !!! DO NOT EVER USE HARD-CODED VALUES IN A REAL APP !!!
+# Instead, set and test environment variables, like below
+# if ENV['GITHUB_CLIENT_ID'] && ENV['GITHUB_CLIENT_SECRET']
+#  CLIENT_ID        = ENV['GITHUB_CLIENT_ID']
+#  CLIENT_SECRET    = ENV['GITHUB_CLIENT_SECRET']
+# end
 
 CLIENT_ID = ENV['GH_BASIC_CLIENT_ID']
 CLIENT_SECRET = ENV['GH_BASIC_SECRET_ID']
@@ -20,6 +27,25 @@ get '/callback' do
                            :code => session_code},
                            :accept => :json)
 
-  # extract the token and granted scopes
+  # extract token and granted scopes
   access_token = JSON.parse(result)['access_token']
+  scopes = JSON.parse(result)['scope'].split(',')
+
+  # check if we were granted user:email scope
+  has_user_email_scope = scopes.include? 'user:email'
+
+  # fetch user information
+  auth_result = JSON.parse(RestClient.get('https://api.github.com/user',
+                                          {:params => {:access_token => access_token},
+                                           :accept => :json}))
+
+  # if the user authorized it, fetch private emails
+  if has_user_email_scope
+    auth_result['private_emails'] =
+      JSON.parse(RestClient.get('https://api.github.com/user/emails',
+                                {:params => {:access_token => access_token},
+                                 :accept => :json}))
+  end
+
+  erb :basic, :locals => auth_result
 end
